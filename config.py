@@ -20,15 +20,16 @@ load_dotenv(ROOT / ".env")
 # Change this to switch corpora, or pass --corpus on the command line.
 # Options are the folder names inside corpora/. See corpora/README.md.
 
-CORPUS = os.getenv("AI201_CORPUS", "campus_life")
+CORPUS = os.getenv("AI201_CORPUS", "city_guides")
 
 
 # ─── Chunking (Milestone 3) ──────────────────────────────────────────────────
-# These are deliberately plain, generic numbers. Milestone 3 is where you
-# replace them with numbers that fit the documents you actually read.
+# city_guides docs are long and sectioned under ## headings. We prefer
+# section boundaries; these numbers only kick in when a single section is
+# still longer than CHUNK_SIZE and needs a further split.
 
-CHUNK_SIZE = 800        # characters per chunk
-CHUNK_OVERLAP = 120     # characters shared between neighbouring chunks
+CHUNK_SIZE = 700        # max characters when a section needs further splitting
+CHUNK_OVERLAP = 100     # characters shared between neighbouring sub-chunks
 
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
@@ -40,10 +41,9 @@ TOP_K = 5               # how many chunks to pull back per question
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
-THRESHOLD = 0.6
+# Tuned in Milestone 4: in-corpus best distances were 0.18–0.48,
+# out-of-scope were 0.81–0.98. Cutoff sits in that gap.
+THRESHOLD = 0.65
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
