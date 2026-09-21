@@ -23,10 +23,10 @@ For at least 4 of my 5 test questions, the retrieved chunks include one that
 contains the answer.
 
 **Why this target:**
-One of my five questions (Halden Bay best months) can also be answered from the
-cross-cutting seasons guide, not only the Halden Bay town guide, so the right
-chunk may not always be the top hit. Allowing one miss keeps the target honest
-without pretending every question has a single obvious source.
+One of my questions (best months for Halden Bay) also shows up in the seasons
+guide, not just the Halden Bay town file. So the "right" chunk might not always
+be obvious. I'm fine missing one. Saying 5/5 would be pretending every question
+has one clean source.
 
 ---
 
@@ -35,10 +35,9 @@ without pretending every question has a single obvious source.
 Every answer the system produces names at least one source document.
 
 **Why this target:**
-All five, not four, because the grounding instruction and the prompt both tell
-the model to name the filename, and the retrieved excerpts already carry
-`[from filename]` labels. If a produced answer still omits a source, that is a
-prompt or generation failure, not a hard retrieval edge case.
+Going for all five here. The prompt already says to name the file, and each
+chunk is labeled `[from filename]`. If it still skips the source, that's on the
+model side, not some weird retrieval edge case. Missing even one would bug me.
 
 ---
 
@@ -54,10 +53,9 @@ in at least 4 of 5 tries.
      just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
 
 **Why this target:**
-4 of 5 rather than 5 of 5 because a travel-guide embedding space can
-occasionally pull a weakly related "practical notes" chunk for an unrelated
-how-to question. One miss is tolerable; two would mean the cutoff is too loose
-for this corpus.
+4 of 5, not 5 of 5. These are travel guides, so sometimes a random how-to
+question still grabs a weak "practical notes" chunk. One miss is whatever. Two
+means my cutoff is too high.
 
 ---
 
@@ -67,26 +65,24 @@ At least 4 of 5 sampled chunks begin with a section heading (or the document
 title) and do not cut mid-sentence at either end.
 
 **Why this target:**
-city_guides documents are organised under `##` headings. The starter's
-fixed-size windows sliced straight through those labels. A chunk that still
-ends mid-sentence after my section-aware splitter is a real failure, but
-requiring 5 of 5 would punish one leftover sub-chunk when a long section still
-needs a secondary split.
+The whole point of picking `city_guides` was the `##` headings. Starter chunking
+cut right through them. If my chunks still end mid-sentence, that's a real fail.
+But 5/5 feels harsh because long sections still get a secondary split sometimes,
+and one of those leftovers might look a little rough.
 
 ---
 
 ## 5. Answers stay specific to the place asked about
 
-For at least 4 of 5 test questions, the answer mentions the place named in the
+For at least 4 of my 5 test questions, the answer mentions the place named in the
 question (for example "Kestrelford" or "Halden Bay") and does not substitute a
 different town from the retrieved context.
 
 **Why this target:**
-Several town guides share the same section labels ("Getting there", "When to
-go"), so retrieval can return the right *kind* of section from the wrong town.
-4 of 5 is the bar I care about: if the system confuses Halden Bay parking with
-Kestrelford's car park more than once, the chunking/retrieval design is wrong
-for this corpus.
+Every town guide has the same section names ("Getting there", "When to go"), so
+it's easy for retrieval to grab the right *type* of section from the wrong town.
+If it mixes up Halden Bay parking with Kestrelford more than once, something's
+off with how I chunked or retrieved. 4 of 5 is the bar I actually care about.
 
 ---
 

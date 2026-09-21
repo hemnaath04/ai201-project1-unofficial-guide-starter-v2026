@@ -8,34 +8,32 @@
 
 ## What This Does
 
-This system answers practical travel questions about a fictional coastal region
-using fourteen long, sectioned guides (nine towns plus region-wide notes on
-eating, walking, transport, seasons, and accessibility). Ask things like
-whether a town has a train station, when parking fills up, or what time
-kitchens stop serving — and get an answer drawn only from those documents,
-with the source file named. If nothing in the corpus is close enough, it
-refuses instead of guessing.
+I indexed the `city_guides` corpus: 14 travel guides for a fake coastal
+region (9 towns, plus eating / walking / transport / seasons /
+accessibility). You can ask stuff like "does Kestrelford have a train?" or
+"when does parking fill at Halden Bay?" and it answers from those docs only,
+with the filename attached. If the closest chunk is too far off, it just says
+it doesn't know instead of making something up.
 
 ## Chunking Strategy
 
-**Chunk size:** 700 characters (only used when a single section is still too long)
-**Overlap:** 100 characters (only between sub-chunks of an oversized section)
+**Chunk size:** 700 characters (only kicks in if one section is still too long)
+**Overlap:** 100 characters (only between those sub-chunks)
 
-`city_guides` documents are 1–3 thousand characters each and organised under
-`##` headings (Getting there, Eat and drink, When to go, and so on). The
-starter's fixed 800-character windows cut straight through those labels —
-indexing with the fallback produced 56 chunks that often started mid-section.
-I replaced that with a section-aware splitter: each `##` block becomes a
-chunk, prefixed with the document title so a Halden Bay "Getting there"
-chunk cannot be confused with Kestrelford's. Short intro blurbs under the
-title are folded into the first section so they are not left as fragments.
-Only sections that still exceed 700 characters are split further, on
-paragraph or sentence boundaries, with 100 characters of overlap.
+These guides are long and already split under `##` headings (Getting there,
+Eat and drink, When to go, etc.). The starter just cuts every 800 characters,
+so when I first indexed I got 56 chunks and a bunch of them started halfway
+through a section. That felt wrong for this corpus.
 
-I started at 800/120 (the starter defaults) and dropped to 700/100 after
-seeing that most labelled sections already sit under 700 characters —
-keeping the secondary split rare means most chunks stay one complete
-section.
+So I chunk on the headings instead. Each `##` block is one chunk, and I stick
+the doc title on top so "Getting there" from Halden Bay doesn't look the same
+as "Getting there" from Kestrelford. Tiny intro blurbs under the title get
+merged into the first real section, otherwise they're useless on their own.
+If a section is still over 700 chars, I split it on paragraph/sentence breaks
+with 100 overlap.
+
+I tried the starter 800/120 first. Most sections were already under 700, so I
+dropped to 700/100 and let the secondary split stay rare.
 
 ## Sample Chunks
 
@@ -125,11 +123,10 @@ Sources retrieved: guide_kestrelford.md
 
 **My relevance cutoff:** 0.65
 
-In-corpus best distances for my five test questions sat between **0.18 and
-0.48**. The five OUT_OF_SCOPE questions sat between **0.81 and 0.99**. The gap
-is wide, so 0.65 sits comfortably in the middle: low enough to refuse Mongolia /
-Rust / World Cup questions, high enough not to refuse a real eating-hours
-question that came in at 0.48.
+My five real questions landed between 0.18 and 0.48 on best distance. The five
+out-of-scope ones were 0.81 to 0.99. Pretty clean gap, so I put the cutoff at
+0.65. That still refuses Mongolia / Rust / World Cup stuff, and it doesn't
+kill the eating-hours question that came in at 0.48.
 
 | Question | In corpus? | Best distance |
 |---|---|---|
@@ -146,18 +143,17 @@ question that came in at 0.48.
 
 ## How I Used AI
 
-**1.** I asked for pressure-testing on my draft acceptance criteria: "For each
-one, tell me exactly how you would test it using only what the sentence says."
-It could not turn an early version of criterion 5 ("answers should feel
-specific") into a test, so I rewrote it to require the place name from the
-question to appear in the answer, with a 4-of-5 target.
+**1.** I pasted my draft criteria and asked: "for each one, tell me exactly how
+you'd test it using only what the sentence says." Criterion 5 was originally
+something vague like "answers should feel specific," and it basically said it
+couldn't test that. So I changed it to: the answer has to mention the place
+from the question, 4 out of 5 times.
 
-**2.** I sketched the section-aware chunker from notes and asked the model to
-implement splitting on `##` headings with overlap. The first draft ignored
-overlap on oversized sections and left short intro blurbs as standalone
-chunks that could not answer anything. I added the secondary
-paragraph/sentence split with overlap, and the rule that folds short intros
-into the next section.
+**2.** I wrote out how I wanted chunking to work (split on `##`, keep the title,
+handle overlap) and asked it to code that. First version skipped overlap on
+long sections and left those short intro paragraphs as their own chunks, which
+couldn't answer anything alone. I fixed both: secondary split with overlap, and
+merge short intros into the next section.
 
 ---
 
