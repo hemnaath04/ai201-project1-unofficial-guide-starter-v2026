@@ -22,6 +22,7 @@ to it, write down what you saw, and move on. That's a real observation about
 your pipeline, not giving up.
 """
 
+import re
 from dataclasses import dataclass
 
 import config
@@ -80,24 +81,149 @@ def fallback_split(
     return chunks
 
 
+_HEADING = re.compile(r"^##\s+", re.MULTILINE)
+_SENTENCE_END = re.compile(r"[.!?]\s+")
+
+
+def _find_cut(window: str, min_pos: int) -> int:
+    """Pick the latest clean break in window at or after min_pos; else -1."""
+    # Prefer paragraph, then sentence, then whitespace — never mid-word.
+    for finder in (
+        lambda w: w.rfind("\n\n"),
+        lambda w: max((m.end() for m in _SENTENCE_END.finditer(w)), default=-1),
+        lambda w: max(w.rfind(" "), w.rfind("\n")),
+    ):
+        cut = finder(window)
+        if cut >= min_pos:
+            return cut
+    return -1
+
+
+def _split_oversized(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """Split a long section on paragraph / sentence boundaries, with overlap."""
+    if len(text) <= chunk_size:
+        return [text]
+
+    pieces: list[str] = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        if end < len(text):
+            window = text[start:end]
+            cut = _find_cut(window, chunk_size // 3)
+            if cut > 0:
+                end = start + cut
+
+        piece = text[start:end].strip()
+        if piece:
+            pieces.append(piece)
+
+        if end >= len(text):
+            break
+        # Advance with overlap, but land on a word boundary going forward.
+        next_start = max(end - overlap, start + 1)
+        while next_start < len(text) and not text[next_start].isspace():
+            next_start += 1
+        while next_start < len(text) and text[next_start].isspace():
+            next_start += 1
+        start = next_start if next_start > start else end
+
+    return pieces
+
+
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    Split city_guides-style documents on ## section headings.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
-
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
-
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    Each labelled section becomes its own chunk, with the document title (the
+    first # heading, or the first line) kept as a one-line prefix so a chunk
+    still names which town or guide it belongs to. Sections longer than
+    CHUNK_SIZE are split further on paragraph/sentence boundaries with overlap.
     """
-    return fallback_split(documents)
+    chunk_size = config.CHUNK_SIZE
+    overlap = config.CHUNK_OVERLAP
+    if overlap >= chunk_size:
+        raise ValueError("overlap has to be smaller than chunk_size")
+
+    chunks: list[Chunk] = []
+    for doc in documents:
+        text = doc.text.strip()
+        if not text:
+            continue
+
+        # Document title: first markdown H1, else the first non-empty line.
+        title = ""
+        body = text
+        if text.startswith("# "):
+            first_line, _, rest = text.partition("\n")
+            title = first_line.lstrip("# ").strip()
+            body = rest.lstrip("\n")
+        else:
+            first_line = text.split("\n", 1)[0].strip()
+            if first_line:
+                title = first_line
+
+        # Split on ## headings, keeping the heading with its section body.
+        parts = _HEADING.split(body)
+        headings = _HEADING.findall(body)
+
+        sections: list[str] = []
+        # Text before the first ## (intro blurb under the title).
+        intro = parts[0].strip() if parts else ""
+        if intro:
+            sections.append(intro)
+
+        for i, _ in enumerate(headings):
+            section_body = parts[i + 1] if i + 1 < len(parts) else ""
+            # After re.split on ^##\s+, the heading words sit at the start of
+            # each subsequent part, up to the first newline.
+            heading_line, _, remainder = section_body.partition("\n")
+            heading_text = heading_line.strip()
+            content = remainder.lstrip("\n").strip()
+            block = f"## {heading_text}"
+            if content:
+                block = f"{block}\n\n{content}"
+            sections.append(block)
+
+        if not sections:
+            sections = [body]
+
+        # Fold a short title-only intro into the first real section so it isn't
+        # left as a fragment that can't answer anything on its own.
+        if (
+            len(sections) >= 2
+            and len(sections[0]) < 250
+            and not sections[0].lstrip().startswith("## ")
+        ):
+            sections[1] = f"{sections[0]}\n\n{sections[1]}"
+            sections = sections[1:]
+
+        index = 0
+        for section in sections:
+            prefix = f"{title}\n\n" if title else ""
+            full = f"{prefix}{section}".strip()
+            for i, piece in enumerate(_split_oversized(full, chunk_size, overlap)):
+                # Continuations of a long section lose the title line — put it back
+                # so each chunk still names which guide it came from.
+                if (
+                    i > 0
+                    and title
+                    and not piece.startswith(title)
+                ):
+                    piece = f"{title}\n\n{piece}".strip()
+                if len(piece) < 40:
+                    continue
+                chunks.append(
+                    Chunk(
+                        text=piece,
+                        source=doc.source,
+                        index=index,
+                        produced_by="chunker.py::split_documents",
+                    )
+                )
+                index += 1
+
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:
